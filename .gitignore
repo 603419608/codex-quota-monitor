@@ -1,0 +1,9 @@
+bin/
+obj/
+artifacts/
+.vs/
+.claude/
+*.user
+*.suo
+*.tmp
+*.log
