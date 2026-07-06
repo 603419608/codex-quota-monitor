@@ -39,7 +39,7 @@ public static class CodexWindowDetector
             }
         }
 
-        return FindCodexWindowByAutomation();
+        return null;
     }
 
     private static AutomationElement? FindCodexWindowByAutomation()

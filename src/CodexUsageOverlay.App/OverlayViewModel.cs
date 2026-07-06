@@ -21,6 +21,11 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
     private static readonly TimeSpan ContextStaleGrace = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan RateLimitStaleGrace = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan ResetCreditMidnightDelay = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan ResetCreditManualCooldown = TimeSpan.FromSeconds(60);
+    private const int ContextFastPollSeconds = 5;
+    private const int ContextMediumPollSeconds = 10;
+    private const int ContextSlowPollSeconds = 15;
+    private const int ContextHiddenPollSeconds = 30;
 
     private readonly OverlaySettings _settings;
     private readonly SettingsStore _settingsStore;
@@ -33,6 +38,8 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
     private Task? _contextPollingTask;
     private Task? _resetCreditPollingTask;
     private volatile bool _isCodexWindowAvailable = true;
+    private int _contextReadInProgress;
+    private int _contextPollSeconds = ContextFastPollSeconds;
 
     private double _contextRingValue;
     private double _fiveHourValue;
@@ -69,6 +76,12 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
     private DateTimeOffset _lastValidWeeklyAt;
     private DateOnly? _lastResetCreditAttemptDate;
     private bool _resetCreditsHaveAvailableData;
+    private bool _isResetCreditsRefreshing;
+    private DateTimeOffset? _lastManualResetCreditAttemptAt;
+    private Task? _resetCreditCooldownTask;
+    private double? _lastContextUsedPercentForInterval;
+    private bool _lastContextReadWasAvailable;
+    private int _stableContextReadCount;
 
     public OverlayViewModel(OverlaySettings settings, SettingsStore settingsStore, Dispatcher dispatcher)
     {
@@ -90,6 +103,7 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string ExitButtonText => Text.Exit;
     public string HideToTrayText => Text.HideToTray;
     public string ExpandFullModeText => Text.ExpandFullMode;
+    public string RefreshResetCreditsText => Text.RefreshResetCredits;
 
     public double ContextRingValue
     {
@@ -193,6 +207,8 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
         set => SetField(ref _resetCreditsVisibility, value);
     }
 
+    public bool CanRefreshResetCredits => !_isResetCreditsRefreshing && !IsManualResetCreditCooldownActive();
+
     public Brush ContextRingBrush
     {
         get => _contextRingBrush;
@@ -279,8 +295,40 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
         _settingsStore.Save(_settings);
     }
 
+    public async Task RefreshResetCreditsManuallyAsync()
+    {
+        if (_isResetCreditsRefreshing || IsManualResetCreditCooldownActive())
+        {
+            return;
+        }
+
+        _lastManualResetCreditAttemptAt = DateTimeOffset.UtcNow;
+        SetResetCreditsRefreshing(true);
+        ScheduleResetCreditCooldownRelease(_cts.Token);
+        try
+        {
+            var snapshot = await _resetCreditClient.FetchAsync(_cts.Token);
+            _resetCreditCacheStore.Save(snapshot);
+            _lastResetCreditAttemptDate = DateOnly.FromDateTime(DateTime.Now);
+            Dispatch(() => ApplyResetCredits(snapshot));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+            // Manual refresh is opportunistic. Keep the last cached UI instead of clearing it.
+        }
+        finally
+        {
+            Dispatch(() => SetResetCreditsRefreshing(false));
+        }
+    }
+
     private void ApplyContextUsage(ContextUsage usage)
     {
+        UpdateContextPollingCadence(usage);
+
         if (!usage.IsAvailable)
         {
             ApplyContextUnavailableOrCached();
@@ -365,6 +413,7 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
         _isCodexWindowAvailable = isAvailable;
         if (isAvailable && !wasAvailable)
         {
+            ResetContextPollingCadence();
             _ = RefreshContextUsageAsync(_cts.Token);
         }
     }
@@ -376,8 +425,8 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
             try
             {
                 var delay = _isCodexWindowAvailable
-                    ? TimeSpan.FromSeconds(5)
-                    : TimeSpan.FromSeconds(30);
+                    ? TimeSpan.FromSeconds(System.Threading.Volatile.Read(ref _contextPollSeconds))
+                    : TimeSpan.FromSeconds(ContextHiddenPollSeconds);
                 await Task.Delay(delay, cancellationToken);
                 if (_isCodexWindowAvailable)
                 {
@@ -414,8 +463,20 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
             return;
         }
 
-        var usage = await _statusReader.ReadCurrentContextAsync(cancellationToken);
-        Dispatch(() => ApplyContextUsage(usage));
+        if (System.Threading.Interlocked.Exchange(ref _contextReadInProgress, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            var usage = await _statusReader.ReadCurrentContextAsync(cancellationToken);
+            Dispatch(() => ApplyContextUsage(usage));
+        }
+        finally
+        {
+            System.Threading.Volatile.Write(ref _contextReadInProgress, 0);
+        }
     }
 
     private void ApplyCachedResetCredits()
@@ -502,6 +563,72 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
         ResetCreditsTooltipText = null;
         ResetCreditsVisibility = Visibility.Visible;
         UpdateMiniResetTooltip();
+    }
+
+    private void SetResetCreditsRefreshing(bool isRefreshing)
+    {
+        if (_isResetCreditsRefreshing == isRefreshing)
+        {
+            return;
+        }
+
+        _isResetCreditsRefreshing = isRefreshing;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanRefreshResetCredits)));
+    }
+
+    private bool IsManualResetCreditCooldownActive()
+    {
+        return _lastManualResetCreditAttemptAt is not null &&
+            DateTimeOffset.UtcNow - _lastManualResetCreditAttemptAt.Value < ResetCreditManualCooldown;
+    }
+
+    private void ScheduleResetCreditCooldownRelease(CancellationToken cancellationToken)
+    {
+        _resetCreditCooldownTask = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(ResetCreditManualCooldown, cancellationToken);
+                Dispatch(() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanRefreshResetCredits))));
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }, cancellationToken);
+    }
+
+    private void UpdateContextPollingCadence(ContextUsage usage)
+    {
+        if (!usage.IsAvailable)
+        {
+            _lastContextReadWasAvailable = false;
+            ResetContextPollingCadence();
+            return;
+        }
+
+        if (!_lastContextReadWasAvailable ||
+            _lastContextUsedPercentForInterval is null ||
+            Math.Abs(_lastContextUsedPercentForInterval.Value - usage.UsedPercent) >= 0.5)
+        {
+            _lastContextReadWasAvailable = true;
+            _lastContextUsedPercentForInterval = usage.UsedPercent;
+            ResetContextPollingCadence();
+            return;
+        }
+
+        _stableContextReadCount++;
+        var nextSeconds = _stableContextReadCount >= 4
+            ? ContextSlowPollSeconds
+            : _stableContextReadCount >= 2
+                ? ContextMediumPollSeconds
+                : ContextFastPollSeconds;
+        System.Threading.Volatile.Write(ref _contextPollSeconds, nextSeconds);
+    }
+
+    private void ResetContextPollingCadence()
+    {
+        _stableContextReadCount = 0;
+        System.Threading.Volatile.Write(ref _contextPollSeconds, ContextFastPollSeconds);
     }
 
     private void Dispatch(Action action)
@@ -716,6 +843,17 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
             try
             {
                 await _resetCreditPollingTask;
+            }
+            catch
+            {
+            }
+        }
+
+        if (_resetCreditCooldownTask is not null)
+        {
+            try
+            {
+                await _resetCreditCooldownTask;
             }
             catch
             {

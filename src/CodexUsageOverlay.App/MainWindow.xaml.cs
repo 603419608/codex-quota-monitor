@@ -139,6 +139,11 @@ public partial class MainWindow : Window
         HideToTray();
     }
 
+    private async void RefreshResetCreditsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await _viewModel.RefreshResetCreditsManuallyAsync();
+    }
+
     private void CollapseButton_Click(object sender, RoutedEventArgs e)
     {
         _viewModel.IsCollapsed = true;
@@ -198,6 +203,11 @@ public partial class MainWindow : Window
         if (!Dispatcher.CheckAccess())
         {
             Dispatcher.Invoke(() => ApplyCodexWindowPresence(isAvailable));
+            return;
+        }
+
+        if (_isClosing)
+        {
             return;
         }
 

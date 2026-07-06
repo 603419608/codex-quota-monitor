@@ -15,6 +15,7 @@ public sealed class LocalizedStrings
     public required string Exit { get; init; }
     public required string HideToTray { get; init; }
     public required string ExpandFullMode { get; init; }
+    public required string RefreshResetCredits { get; init; }
     public required string ContextShort { get; init; }
     public required string FiveHourShort { get; init; }
     public required string WeeklyShort { get; init; }
@@ -45,6 +46,7 @@ public sealed class LocalizedStrings
         Exit = "退出",
         HideToTray = "隐藏到托盘",
         ExpandFullMode = "展开完整模式",
+        RefreshResetCredits = "刷新重置机会",
         ContextShort = "上下文",
         FiveHourShort = "5小时",
         WeeklyShort = "周",
@@ -66,6 +68,7 @@ public sealed class LocalizedStrings
         Exit = "Exit",
         HideToTray = "Hide to tray",
         ExpandFullMode = "Expand full mode",
+        RefreshResetCredits = "Refresh reset credits",
         ContextShort = "Context",
         FiveHourShort = "5h",
         WeeklyShort = "Week",
@@ -87,6 +90,7 @@ public sealed class LocalizedStrings
         Exit = "Quitter",
         HideToTray = "Réduire dans la zone de notification",
         ExpandFullMode = "Mode complet",
+        RefreshResetCredits = "Actualiser les réinitialisations",
         ContextShort = "Contexte",
         FiveHourShort = "5 h",
         WeeklyShort = "Hebdo",

@@ -22,6 +22,39 @@
         <SolidColorBrush x:Key="SubtleSeparatorBrush" Color="#303030" />
         <SolidColorBrush x:Key="TrackBrush" Color="#313131" />
 
+        <Style x:Key="TransparentIconButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Opacity" Value="0.75" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#5F5F5F" />
+                                <Setter Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="GaugeTitle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
             <Setter Property="FontSize" Value="12" />
@@ -196,14 +229,29 @@
                     <Border Height="1"
                             Background="{StaticResource SubtleSeparatorBrush}"
                             Margin="8,0,8,8" />
-                    <TextBlock Text="{Binding ResetCreditsSummaryText}"
-                               ToolTip="{Binding ResetCreditsTooltipText}"
-                               Foreground="{StaticResource MutedTextBrush}"
-                               FontSize="11"
-                               FontWeight="SemiBold"
-                               TextAlignment="Center"
-                               TextWrapping="Wrap"
-                               MaxWidth="170" />
+                    <Grid ToolTip="{Binding ResetCreditsTooltipText}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="22" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding ResetCreditsSummaryText}"
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center"
+                                   MaxWidth="148" />
+                        <Button Grid.Column="1"
+                                Style="{StaticResource TransparentIconButton}"
+                                Content="↻"
+                                Width="20"
+                                Height="20"
+                                FontSize="12"
+                                ToolTip="{Binding RefreshResetCreditsText}"
+                                IsEnabled="{Binding CanRefreshResetCredits}"
+                                Click="RefreshResetCreditsButton_Click" />
+                    </Grid>
                 </StackPanel>
             </StackPanel>
         </Grid>
