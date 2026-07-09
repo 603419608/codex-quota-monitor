@@ -1,7 +1,7 @@
 {
   "id": "codex-usage-overlay",
   "name": "codex-usage-overlay",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A Windows companion overlay for Codex context usage and rate limits.",
   "author": {
     "name": "DENG GUOCHAO"
@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "Codex Usage Overlay",
     "shortDescription": "Show Codex context usage and rate limits.",
-    "longDescription": "A Windows WPF companion overlay that displays current Codex context remaining, 5-hour usage limit remaining, and weekly usage limit remaining. It follows the Codex window and uses Codex app-server only for rate limit data.",
+    "longDescription": "A Windows WPF companion overlay that displays current ChatGPT Codex context remaining, 5-hour usage limit remaining, and weekly usage limit remaining. It follows the ChatGPT window and uses Codex app-server only for rate limit data.",
     "developerName": "DENG GUOCHAO",
     "category": "Productivity",
     "capabilities": [

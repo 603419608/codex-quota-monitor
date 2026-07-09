@@ -61,7 +61,7 @@ public sealed class AppServerClient : IAsyncDisposable
             {
                 ["name"] = "codex_usage_overlay",
                 ["title"] = "Codex Usage Overlay",
-                ["version"] = "0.1.5"
+                ["version"] = "0.1.6"
             },
             ["capabilities"] = new JsonObject
             {

@@ -80,7 +80,7 @@ public static class CodexWindowDetector
                 continue;
             }
 
-            if (!IsCodexProcess(processId) && !IsCodexWindowTitle(name))
+            if (!IsChatGptProcess(processId) && !IsChatGptWindowTitle(name))
             {
                 continue;
             }
@@ -90,7 +90,7 @@ public static class CodexWindowDetector
                 continue;
             }
 
-            if (string.Equals(name, "Codex", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(name, "ChatGPT", StringComparison.OrdinalIgnoreCase))
             {
                 return window;
             }
@@ -132,9 +132,9 @@ public static class CodexWindowDetector
         }
 
         _ = GetWindowThreadProcessId(hwnd, out var processId);
-        var isCodexProcess = IsCodexProcess((int)processId);
-        if (!isCodexProcess &&
-            (!TryGetWindowText(hwnd, out var title) || !IsCodexWindowTitle(title)))
+        var isChatGptProcess = IsChatGptProcess((int)processId);
+        if (!isChatGptProcess &&
+            (!TryGetWindowText(hwnd, out var title) || !IsChatGptWindowTitle(title)))
         {
             return false;
         }
@@ -160,13 +160,12 @@ public static class CodexWindowDetector
         return length > 0;
     }
 
-    private static bool IsCodexProcess(int processId)
+    private static bool IsChatGptProcess(int processId)
     {
         try
         {
             using var process = Process.GetProcessById(processId);
-            return process.ProcessName.Contains("Codex", StringComparison.OrdinalIgnoreCase) &&
-                   !process.ProcessName.Contains("CodexUsageOverlay", StringComparison.OrdinalIgnoreCase);
+            return process.ProcessName.Equals("ChatGPT", StringComparison.OrdinalIgnoreCase);
         }
         catch
         {
@@ -174,10 +173,9 @@ public static class CodexWindowDetector
         }
     }
 
-    private static bool IsCodexWindowTitle(string title)
+    private static bool IsChatGptWindowTitle(string title)
     {
-        return title.Equals("Codex", StringComparison.OrdinalIgnoreCase) ||
-               title.Contains("OpenAI Codex", StringComparison.OrdinalIgnoreCase);
+        return title.Equals("ChatGPT", StringComparison.OrdinalIgnoreCase);
     }
 
     [DllImport("user32.dll")]
