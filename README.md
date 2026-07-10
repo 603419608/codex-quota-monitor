@@ -39,7 +39,7 @@ Codex Quota Monitor is an **unofficial** Windows companion overlay for the ChatG
 
 ### Install (prebuilt binary)
 
-1. Download `codex-quota-monitor-win-x64-v0.1.6.zip` from the [latest Release](../../releases/latest).
+1. Download `codex-quota-monitor-win-x64-v0.1.7.zip` from the [latest Release](../../releases/latest).
 2. Extract the zip to any folder, for example `C:\Tools\CodexQuotaMonitor`.
 3. Run `CodexUsageOverlay.App.exe`.
 4. Open ChatGPT and enter Codex. The overlay should appear automatically.
@@ -146,7 +146,7 @@ Codex Quota Monitor 是一个**非官方**的 Windows ChatGPT Codex 桌面悬浮
 
 ### 安装（预编译二进制）
 
-1. 从 [最新 Release](../../releases/latest) 下载 `codex-quota-monitor-win-x64-v0.1.6.zip`。
+1. 从 [最新 Release](../../releases/latest) 下载 `codex-quota-monitor-win-x64-v0.1.7.zip`。
 2. 解压到任意文件夹，例如 `C:\Tools\CodexQuotaMonitor`。
 3. 运行 `CodexUsageOverlay.App.exe`。
 4. 打开 ChatGPT 并进入 Codex，悬浮窗会自动出现。

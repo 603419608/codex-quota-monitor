@@ -515,7 +515,8 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
         catch
         {
-            Dispatch(ApplyResetCreditsUnavailable);
+            // Keep the last cached UI. The daily automatic attempt remains low-frequency,
+            // while the manual refresh button can retry transient failures.
         }
     }
 
@@ -551,16 +552,6 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
             snapshot.AvailableCount,
             FormatResetCreditSummaryDate(earliest));
         ResetCreditsTooltipText = FormatResetCreditsTooltip(snapshot.AvailableCount, availableCredits);
-        ResetCreditsVisibility = Visibility.Visible;
-        UpdateMiniResetTooltip();
-    }
-
-    private void ApplyResetCreditsUnavailable()
-    {
-        _resetCreditsHaveAvailableData = false;
-        _resetCreditsTrayText = string.Empty;
-        ResetCreditsSummaryText = Text.ResetCreditsUnavailable;
-        ResetCreditsTooltipText = null;
         ResetCreditsVisibility = Visibility.Visible;
         UpdateMiniResetTooltip();
     }

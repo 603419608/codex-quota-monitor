@@ -15,7 +15,19 @@ var tests = new (string Name, Action Run)[]
     ("rate limit parser reads app-server primary secondary shape", RateLimitParserReadsPrimarySecondaryShape),
     ("rate limit parser reads reset timestamps", RateLimitParserReadsResetTimestamps),
     ("rate limit parser treats one as one percent", RateLimitParserTreatsOneAsOnePercent),
+    ("rate limit parser treats fractional used percent as percent", RateLimitParserTreatsFractionalUsedPercentAsPercent),
+    ("rate limit parser preserves sub-one used percent near reset", RateLimitParserPreservesSubOneUsedPercentNearReset),
     ("rate limit parser reads remaining and limit shape", RateLimitParserReadsRemainingAndLimitShape),
+    ("rate limit update rejects model bucket", RateLimitUpdateRejectsModelBucket),
+    ("rate limit update accepts total bucket", RateLimitUpdateAcceptsTotalBucket),
+    ("rate limit update preserves weekly on primary-only update", RateLimitUpdatePreservesWeeklyOnPrimaryOnlyUpdate),
+    ("rate limit update preserves five hour on secondary-only update", RateLimitUpdatePreservesFiveHourOnSecondaryOnlyUpdate),
+    ("rate limit update rejects notification without id", RateLimitUpdateRejectsNotificationWithoutId),
+    ("rate limit update rejects identified bucket before baseline", RateLimitUpdateRejectsIdentifiedBucketBeforeBaseline),
+    ("rate limit update rejects when both ids missing", RateLimitUpdateRejectsWhenBothIdsMissing),
+    ("rate limit update rejects empty notification id", RateLimitUpdateRejectsEmptyNotificationId),
+    ("rate limit update rejects whitespace notification id", RateLimitUpdateRejectsWhitespaceNotificationId),
+    ("rate limit update merge sparse keeps missing side unavailable with no previous snapshot", RateLimitUpdateMergeSparseKeepsMissingSideUnavailableWithNoPrevious),
     ("reset credit parser reads available count and expirations", ResetCreditParserReadsAvailableCountAndExpirations),
     ("reset credit parser falls back to available credits", ResetCreditParserFallsBackToAvailableCredits)
 };
@@ -198,6 +210,42 @@ static void RateLimitParserTreatsOneAsOnePercent()
     AssertNear(99, limits.Weekly.RemainingPercent, 0.01, "weekly remaining from one percent used");
 }
 
+static void RateLimitParserTreatsFractionalUsedPercentAsPercent()
+{
+    var json = JsonNode.Parse("""
+    {
+      "result": {
+        "rateLimits": {
+          "primary": { "usedPercent": 0.6, "windowDurationMins": 300 },
+          "secondary": { "usedPercent": 0.6, "windowDurationMins": 10080 }
+        }
+      }
+    }
+    """);
+
+    var limits = UsageParsers.ParseRateLimits(json);
+    AssertNear(99.4, limits.FiveHour.RemainingPercent, 0.01, "fractional five hour used percent");
+    AssertNear(99.4, limits.Weekly.RemainingPercent, 0.01, "fractional weekly used percent");
+}
+
+static void RateLimitParserPreservesSubOneUsedPercentNearReset()
+{
+    var json = JsonNode.Parse("""
+    {
+      "result": {
+        "rateLimits": {
+          "primary": { "used_percent": 0.4, "windowDurationMins": 300 },
+          "secondary": { "percent_used": 0.4, "windowDurationMins": 10080 }
+        }
+      }
+    }
+    """);
+
+    var limits = UsageParsers.ParseRateLimits(json);
+    AssertNear(99.6, limits.FiveHour.RemainingPercent, 0.01, "sub-one five hour used percent");
+    AssertNear(99.6, limits.Weekly.RemainingPercent, 0.01, "sub-one weekly used percent");
+}
+
 static void RateLimitParserReadsRemainingAndLimitShape()
 {
     var json = JsonNode.Parse("""
@@ -214,6 +262,111 @@ static void RateLimitParserReadsRemainingAndLimitShape()
     var limits = UsageParsers.ParseRateLimits(json);
     AssertNear(64, limits.FiveHour.RemainingPercent, 0.01, "five hour remaining from remaining/limit");
     AssertNear(89, limits.Weekly.RemainingPercent, 0.01, "weekly remaining from remaining/limit");
+}
+
+static void RateLimitUpdateRejectsModelBucket()
+{
+    var accepted = RateLimitUpdatePolicy.ShouldAcceptRateLimitNotification(
+        "codex",
+        "codex_bengalfox");
+
+    AssertTrue(!accepted, "model-specific bucket should not replace the total bucket");
+}
+
+static void RateLimitUpdateAcceptsTotalBucket()
+{
+    var accepted = RateLimitUpdatePolicy.ShouldAcceptRateLimitNotification("codex", "CODEX");
+    AssertTrue(accepted, "matching total bucket should be accepted case-insensitively");
+
+    var merged = RateLimitUpdatePolicy.MergeSparse(
+        CreateRateLimitSnapshot(90, 80),
+        CreateRateLimitSnapshot(75, 65),
+        hasPrimary: true,
+        hasSecondary: true);
+    AssertNear(75, merged.FiveHour.RemainingPercent, 0.01, "accepted total bucket five hour update");
+    AssertNear(65, merged.Weekly.RemainingPercent, 0.01, "accepted total bucket weekly update");
+}
+
+static void RateLimitUpdatePreservesWeeklyOnPrimaryOnlyUpdate()
+{
+    var merged = RateLimitUpdatePolicy.MergeSparse(
+        CreateRateLimitSnapshot(90, 80),
+        CreateRateLimitSnapshot(70, 0),
+        hasPrimary: true,
+        hasSecondary: false);
+
+    AssertNear(70, merged.FiveHour.RemainingPercent, 0.01, "primary-only five hour update");
+    AssertNear(80, merged.Weekly.RemainingPercent, 0.01, "primary-only update should preserve weekly");
+}
+
+static void RateLimitUpdatePreservesFiveHourOnSecondaryOnlyUpdate()
+{
+    var merged = RateLimitUpdatePolicy.MergeSparse(
+        CreateRateLimitSnapshot(90, 80),
+        CreateRateLimitSnapshot(0, 60),
+        hasPrimary: false,
+        hasSecondary: true);
+
+    AssertNear(90, merged.FiveHour.RemainingPercent, 0.01, "secondary-only update should preserve five hour");
+    AssertNear(60, merged.Weekly.RemainingPercent, 0.01, "secondary-only weekly update");
+}
+
+static void RateLimitUpdateRejectsNotificationWithoutId()
+{
+    AssertTrue(
+        !RateLimitUpdatePolicy.ShouldAcceptRateLimitNotification("codex", null),
+        "notification without a limit id must not override the total bucket");
+}
+
+static void RateLimitUpdateRejectsIdentifiedBucketBeforeBaseline()
+{
+    AssertTrue(
+        !RateLimitUpdatePolicy.ShouldAcceptRateLimitNotification(null, "codex"),
+        "identified notification should wait until the baseline bucket is known");
+}
+
+static void RateLimitUpdateRejectsWhenBothIdsMissing()
+{
+    AssertTrue(
+        !RateLimitUpdatePolicy.ShouldAcceptRateLimitNotification(null, null),
+        "notification must not be accepted when neither baseline nor notification id is known");
+}
+
+static void RateLimitUpdateRejectsEmptyNotificationId()
+{
+    AssertTrue(
+        !RateLimitUpdatePolicy.ShouldAcceptRateLimitNotification("codex", string.Empty),
+        "empty notification limit id must not override the total bucket");
+}
+
+static void RateLimitUpdateRejectsWhitespaceNotificationId()
+{
+    AssertTrue(
+        !RateLimitUpdatePolicy.ShouldAcceptRateLimitNotification("codex", "   "),
+        "whitespace-only notification limit id must not override the total bucket");
+}
+
+static void RateLimitUpdateMergeSparseKeepsMissingSideUnavailableWithNoPrevious()
+{
+    var incoming = new RateLimitSnapshot(
+        new RateLimitMetric(true, "5 hour", 10, 90, null),
+        RateLimitMetric.Unavailable("weekly"));
+
+    var merged = RateLimitUpdatePolicy.MergeSparse(
+        previous: null,
+        incoming,
+        hasPrimary: true,
+        hasSecondary: false);
+
+    AssertTrue(merged.FiveHour.IsAvailable, "five hour metric from the notification should be available");
+    AssertTrue(!merged.Weekly.IsAvailable, "weekly metric missing from the notification stays unavailable when there is no previous snapshot");
+}
+
+static RateLimitSnapshot CreateRateLimitSnapshot(double fiveHourRemaining, double weeklyRemaining)
+{
+    return new RateLimitSnapshot(
+        new RateLimitMetric(true, "5 hour", 100 - fiveHourRemaining, fiveHourRemaining, null),
+        new RateLimitMetric(true, "weekly", 100 - weeklyRemaining, weeklyRemaining, null));
 }
 
 static void ResetCreditParserReadsAvailableCountAndExpirations()

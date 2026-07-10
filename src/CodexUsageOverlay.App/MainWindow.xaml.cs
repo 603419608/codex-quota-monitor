@@ -221,6 +221,7 @@ public partial class MainWindow : Window
         if (isAvailable)
         {
             _codexMissingSince = null;
+            _trayIconService.SetVisible(false);
             if (_lastCodexWindowAvailable == true)
             {
                 return;
@@ -247,6 +248,7 @@ public partial class MainWindow : Window
         }
 
         _lastCodexWindowAvailable = false;
+        _trayIconService.SetVisible(true);
         Hide();
     }
 
@@ -272,6 +274,8 @@ public partial class MainWindow : Window
         }
 
         _isHiddenToTray = false;
+        _lastCodexWindowAvailable = null;
+        _codexMissingSince = null;
         _trayIconService.SetVisible(false);
         Show();
         Activate();

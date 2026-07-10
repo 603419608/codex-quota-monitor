@@ -11,10 +11,13 @@ public sealed class CodexAppServerBridge : IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _connectionGate = new(1, 1);
     private readonly object _reconnectSync = new();
+    private readonly object _snapshotSync = new();
     private readonly AppServerClient? _initialClient;
     private Task? _rateLimitPollingTask;
     private Task? _reconnectTask;
     private AppServerClient? _client;
+    private RateLimitSnapshot? _lastGoodSnapshot;
+    private string? _baselineLimitId;
     private TimeSpan _nextReconnectDelay = InitialReconnectDelay;
     private bool _initialClientUsed;
     private volatile bool _isDisposed;
@@ -66,7 +69,26 @@ public sealed class CodexAppServerBridge : IAsyncDisposable
         try
         {
             var result = await client.SendRequestAsync("account/rateLimits/read", new JsonObject(), cancellationToken);
-            RateLimitsChanged?.Invoke(UsageParsers.ParseRateLimits(new JsonObject { ["result"] = result?.DeepClone() }));
+            var parsed = UsageParsers.ParseRateLimits(new JsonObject { ["result"] = result?.DeepClone() });
+            var rateLimits = (result as JsonObject)?["rateLimits"] as JsonObject;
+            var baselineLimitId = rateLimits is null
+                ? null
+                : JsonNodeHelpers.DirectString(rateLimits, "limitId", "limit_id");
+
+            lock (_snapshotSync)
+            {
+                if (!string.IsNullOrWhiteSpace(baselineLimitId))
+                {
+                    _baselineLimitId = baselineLimitId;
+                }
+
+                if (parsed.FiveHour.IsAvailable || parsed.Weekly.IsAvailable)
+                {
+                    _lastGoodSnapshot = parsed;
+                }
+            }
+
+            RateLimitsChanged?.Invoke(parsed);
             _nextReconnectDelay = InitialReconnectDelay;
             return true;
         }
@@ -225,9 +247,47 @@ public sealed class CodexAppServerBridge : IAsyncDisposable
         switch (method)
         {
             case "account/rateLimits/updated":
-                RateLimitsChanged?.Invoke(UsageParsers.ParseRateLimits(message));
+                ApplyRateLimitNotification(message);
                 break;
         }
+    }
+
+    private void ApplyRateLimitNotification(JsonObject message)
+    {
+        if (message["params"] is not JsonObject parameters ||
+            parameters["rateLimits"] is not JsonObject rateLimits)
+        {
+            return;
+        }
+
+        var notificationLimitId = JsonNodeHelpers.DirectString(rateLimits, "limitId", "limit_id");
+        var hasPrimary = rateLimits["primary"] is JsonObject;
+        var hasSecondary = rateLimits["secondary"] is JsonObject;
+        if (!hasPrimary && !hasSecondary)
+        {
+            return;
+        }
+
+        var incoming = UsageParsers.ParseRateLimits(message);
+        RateLimitSnapshot merged;
+        lock (_snapshotSync)
+        {
+            if (!RateLimitUpdatePolicy.ShouldAcceptRateLimitNotification(
+                    _baselineLimitId,
+                    notificationLimitId))
+            {
+                return;
+            }
+
+            merged = RateLimitUpdatePolicy.MergeSparse(
+                _lastGoodSnapshot,
+                incoming,
+                hasPrimary,
+                hasSecondary);
+            _lastGoodSnapshot = merged;
+        }
+
+        RateLimitsChanged?.Invoke(merged);
     }
 
     public async ValueTask DisposeAsync()

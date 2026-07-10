@@ -158,8 +158,8 @@ public static class UsageParsers
     private static RateLimitMetric ParseRateLimitMetric(JsonObject item)
     {
         var label = JsonNodeHelpers.DirectString(item, "label", "name", "type", "window") ?? "额度";
-        var usedPercent = NormalizePercent(JsonNodeHelpers.DirectNumber(item, "usedPercent", "used_percent", "percentUsed", "percent_used"));
-        var remainingPercent = NormalizePercent(JsonNodeHelpers.DirectNumber(item, "remainingPercent", "remaining_percent", "percentRemaining", "percent_remaining"));
+        var usedPercent = NormalizeUsedPercent(JsonNodeHelpers.DirectNumber(item, "usedPercent", "used_percent", "percentUsed", "percent_used"));
+        var remainingPercent = NormalizeRemainingPercent(JsonNodeHelpers.DirectNumber(item, "remainingPercent", "remaining_percent", "percentRemaining", "percent_remaining"));
         var resetsAt = ParseResetsAt(item);
 
         var remaining = JsonNodeHelpers.DirectNumber(item, "remaining", "remainingTokens", "remaining_tokens", "remainingRequests", "remaining_requests");
@@ -258,7 +258,12 @@ public static class UsageParsers
         return durationMinutes is >= 7 * 24 * 60;
     }
 
-    private static double? NormalizePercent(double? value)
+    private static double? NormalizeUsedPercent(double? value)
+    {
+        return value.HasValue ? Clamp(value.Value, 0, 100) : null;
+    }
+
+    private static double? NormalizeRemainingPercent(double? value)
     {
         if (!value.HasValue)
         {

@@ -54,8 +54,6 @@ public static class CodexWindowDetector
             return null;
         }
 
-        var fallback = default(AutomationElement);
-
         foreach (AutomationElement window in windows)
         {
             string className;
@@ -80,7 +78,7 @@ public static class CodexWindowDetector
                 continue;
             }
 
-            if (!IsChatGptProcess(processId) && !IsChatGptWindowTitle(name))
+            if (!IsChatGptProcess(processId) || !IsChatGptWindowTitle(name))
             {
                 continue;
             }
@@ -90,15 +88,10 @@ public static class CodexWindowDetector
                 continue;
             }
 
-            if (string.Equals(name, "ChatGPT", StringComparison.OrdinalIgnoreCase))
-            {
-                return window;
-            }
-
-            fallback ??= window;
+            return window;
         }
 
-        return fallback;
+        return null;
     }
 
     private static IntPtr FindCodexWindowHandle()
@@ -133,8 +126,9 @@ public static class CodexWindowDetector
 
         _ = GetWindowThreadProcessId(hwnd, out var processId);
         var isChatGptProcess = IsChatGptProcess((int)processId);
-        if (!isChatGptProcess &&
-            (!TryGetWindowText(hwnd, out var title) || !IsChatGptWindowTitle(title)))
+        if (!isChatGptProcess ||
+            !TryGetWindowText(hwnd, out var title) ||
+            !IsChatGptWindowTitle(title))
         {
             return false;
         }

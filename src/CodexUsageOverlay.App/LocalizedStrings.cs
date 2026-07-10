@@ -19,7 +19,6 @@ public sealed class LocalizedStrings
     public required string ContextShort { get; init; }
     public required string FiveHourShort { get; init; }
     public required string WeeklyShort { get; init; }
-    public required string ResetCreditsUnavailable { get; init; }
     public required string ResetCreditsSummaryFormat { get; init; }
     public required string ResetCreditsTraySummaryFormat { get; init; }
     public required string ResetCreditsDetailHeaderFormat { get; init; }
@@ -50,7 +49,6 @@ public sealed class LocalizedStrings
         ContextShort = "上下文",
         FiveHourShort = "5小时",
         WeeklyShort = "周",
-        ResetCreditsUnavailable = "重置机会不可用",
         ResetCreditsSummaryFormat = "重置机会 {0} 次 · 最早 {1} 过期",
         ResetCreditsTraySummaryFormat = "重置 {0}次 · {1}",
         ResetCreditsDetailHeaderFormat = "重置机会 {0} 次",
@@ -72,7 +70,6 @@ public sealed class LocalizedStrings
         ContextShort = "Context",
         FiveHourShort = "5h",
         WeeklyShort = "Week",
-        ResetCreditsUnavailable = "Reset credits unavailable",
         ResetCreditsSummaryFormat = "Resets {0} · first expires {1}",
         ResetCreditsTraySummaryFormat = "Resets {0} · {1}",
         ResetCreditsDetailHeaderFormat = "Resets {0}",
@@ -94,7 +91,6 @@ public sealed class LocalizedStrings
         ContextShort = "Contexte",
         FiveHourShort = "5 h",
         WeeklyShort = "Hebdo",
-        ResetCreditsUnavailable = "Réinitialisations indisponibles",
         ResetCreditsSummaryFormat = "Réinitialisations {0} · première expiration {1}",
         ResetCreditsTraySummaryFormat = "Réinit. {0} · {1}",
         ResetCreditsDetailHeaderFormat = "Réinitialisations {0}",

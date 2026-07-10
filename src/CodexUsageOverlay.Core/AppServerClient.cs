@@ -61,7 +61,7 @@ public sealed class AppServerClient : IAsyncDisposable
             {
                 ["name"] = "codex_usage_overlay",
                 ["title"] = "Codex Usage Overlay",
-                ["version"] = "0.1.6"
+                ["version"] = "0.1.7"
             },
             ["capabilities"] = new JsonObject
             {
@@ -350,7 +350,9 @@ public sealed class AppServerClient : IAsyncDisposable
         }
 
         var id = ReadId(message["id"]);
-        if (id.HasValue && _pending.TryRemove(id.Value, out var pending))
+        var isResponse = message["method"] is null &&
+            (message.ContainsKey("result") || message.ContainsKey("error"));
+        if (isResponse && id.HasValue && _pending.TryRemove(id.Value, out var pending))
         {
             pending.TrySetResult(message);
             return;

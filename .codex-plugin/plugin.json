@@ -1,7 +1,7 @@
 {
   "id": "codex-usage-overlay",
   "name": "codex-usage-overlay",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "A Windows companion overlay for Codex context usage and rate limits.",
   "author": {
     "name": "DENG GUOCHAO"
