@@ -54,8 +54,9 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
     private string _resetCreditsTrayText = string.Empty;
     private string? _resetCreditsTooltipText;
     private string? _miniResetTooltipText;
-    private string _trayTooltipText = $"{Text.ContextShort} --   {Text.FiveHourShort} --   {Text.WeeklyShort} --";
+    private string _trayTooltipText = $"{Text.ContextShort} --   {Text.WeeklyShort} --";
     private double? _trayStatusPercent;
+    private Visibility _fiveHourLimitVisibility = Visibility.Collapsed;
     private Visibility _fiveHourResetVisibility = Visibility.Collapsed;
     private Visibility _weeklyResetVisibility = Visibility.Collapsed;
     private Visibility _resetCreditsVisibility = Visibility.Collapsed;
@@ -187,6 +188,12 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         get => _trayStatusPercent;
         set => SetField(ref _trayStatusPercent, value);
+    }
+
+    public Visibility FiveHourLimitVisibility
+    {
+        get => _fiveHourLimitVisibility;
+        set => SetField(ref _fiveHourLimitVisibility, value);
     }
 
     public Visibility FiveHourResetVisibility
@@ -370,10 +377,20 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private void ApplyRateLimits(RateLimitSnapshot limits)
     {
-        var fiveHour = ResolveMetric(limits.FiveHour, ref _lastValidFiveHour, ref _lastValidFiveHourAt);
-        var weekly = ResolveMetric(limits.Weekly, ref _lastValidWeekly, ref _lastValidWeeklyAt);
+        var hasAuthoritativeMetric = limits.FiveHour.IsAvailable || limits.Weekly.IsAvailable;
+        var fiveHour = ResolveMetric(
+            limits.FiveHour,
+            ref _lastValidFiveHour,
+            ref _lastValidFiveHourAt,
+            allowStaleFallback: !hasAuthoritativeMetric);
+        var weekly = ResolveMetric(
+            limits.Weekly,
+            ref _lastValidWeekly,
+            ref _lastValidWeeklyAt,
+            allowStaleFallback: !hasAuthoritativeMetric);
 
         _lastRateLimits = new RateLimitSnapshot(fiveHour, weekly);
+        FiveHourLimitVisibility = fiveHour.IsAvailable ? Visibility.Visible : Visibility.Collapsed;
         FiveHourValue = fiveHour.IsAvailable ? fiveHour.RemainingPercent : 0;
         WeeklyValue = weekly.IsAvailable ? weekly.RemainingPercent : 0;
         FiveHourGaugeText = FormatPercent(fiveHour);
@@ -390,12 +407,23 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
         UpdateMiniSummary();
     }
 
-    private static RateLimitMetric ResolveMetric(RateLimitMetric incoming, ref RateLimitMetric? lastValid, ref DateTimeOffset lastValidAt)
+    private static RateLimitMetric ResolveMetric(
+        RateLimitMetric incoming,
+        ref RateLimitMetric? lastValid,
+        ref DateTimeOffset lastValidAt,
+        bool allowStaleFallback)
     {
         if (incoming.IsAvailable)
         {
             lastValid = incoming;
             lastValidAt = DateTimeOffset.UtcNow;
+            return incoming;
+        }
+
+        if (!allowStaleFallback)
+        {
+            lastValid = null;
+            lastValidAt = default;
             return incoming;
         }
 
@@ -785,26 +813,35 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         var context = _isContextAvailable ? $"{ContextRingValue:0}%" : "--";
         ContextMiniText = $"{Text.ContextShort} {context}";
-        FiveHourMiniText = $"{Text.FiveHourShort} {FormatPercent(_lastRateLimits.FiveHour)}";
+        FiveHourMiniText = _lastRateLimits.FiveHour.IsAvailable
+            ? $"{Text.FiveHourShort} {FormatPercent(_lastRateLimits.FiveHour)}"
+            : string.Empty;
         WeeklyMiniText = $"{Text.WeeklyShort} {FormatPercent(_lastRateLimits.Weekly)}";
         UpdateTraySummary();
     }
 
     private void UpdateTraySummary()
     {
-        var summary = string.Join(" · ", new[]
+        var summaryParts = new List<string>(3)
         {
-            ContextMiniText,
-            FiveHourMiniText,
-            WeeklyMiniText
-        });
+            ContextMiniText
+        };
+        if (_lastRateLimits.FiveHour.IsAvailable)
+        {
+            summaryParts.Add(FiveHourMiniText);
+        }
+
+        summaryParts.Add(WeeklyMiniText);
+        var summary = string.Join(" · ", summaryParts);
 
         TrayTooltipText = string.IsNullOrWhiteSpace(_resetCreditsTrayText)
             ? summary
             : summary + Environment.NewLine + _resetCreditsTrayText;
         TrayStatusPercent = _lastRateLimits.FiveHour.IsAvailable
             ? _lastRateLimits.FiveHour.RemainingPercent
-            : null;
+            : _lastRateLimits.Weekly.IsAvailable
+                ? _lastRateLimits.Weekly.RemainingPercent
+                : null;
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

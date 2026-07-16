@@ -261,14 +261,14 @@ public sealed class CodexAppServerBridge : IAsyncDisposable
         }
 
         var notificationLimitId = JsonNodeHelpers.DirectString(rateLimits, "limitId", "limit_id");
-        var hasPrimary = rateLimits["primary"] is JsonObject;
-        var hasSecondary = rateLimits["secondary"] is JsonObject;
-        if (!hasPrimary && !hasSecondary)
+        var incoming = UsageParsers.ParseRateLimits(message);
+        var hasFiveHour = incoming.FiveHour.IsAvailable;
+        var hasWeekly = incoming.Weekly.IsAvailable;
+        if (!hasFiveHour && !hasWeekly)
         {
             return;
         }
 
-        var incoming = UsageParsers.ParseRateLimits(message);
         RateLimitSnapshot merged;
         lock (_snapshotSync)
         {
@@ -282,8 +282,8 @@ public sealed class CodexAppServerBridge : IAsyncDisposable
             merged = RateLimitUpdatePolicy.MergeSparse(
                 _lastGoodSnapshot,
                 incoming,
-                hasPrimary,
-                hasSecondary);
+                hasFiveHour,
+                hasWeekly);
             _lastGoodSnapshot = merged;
         }
 

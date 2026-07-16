@@ -171,7 +171,8 @@
                 </StackPanel>
 
                 <StackPanel HorizontalAlignment="Center"
-                            Margin="0,0,0,18">
+                            Margin="0,0,0,18"
+                            Visibility="{Binding FiveHourLimitVisibility}">
                     <StackPanel Orientation="Horizontal"
                                 HorizontalAlignment="Center">
                         <TextBlock Text="{Binding FiveHourTitle}"
@@ -272,19 +273,24 @@
                     <ColumnDefinition Width="22" />
                     <ColumnDefinition Width="22" />
                 </Grid.ColumnDefinitions>
-                <TextBlock FontSize="13"
-                           FontWeight="SemiBold"
-                           VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis">
-                    <Run Text="{Binding ContextMiniText}"
-                         Foreground="{Binding ContextRingBrush}" />
-                    <Run Text="  " />
-                    <Run Text="{Binding FiveHourMiniText}"
-                         Foreground="{Binding FiveHourRingBrush}" />
-                    <Run Text="  " />
-                    <Run Text="{Binding WeeklyMiniText}"
-                         Foreground="{Binding WeeklyRingBrush}" />
-                </TextBlock>
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ContextMiniText}"
+                               Foreground="{Binding ContextRingBrush}"
+                               FontSize="13"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding FiveHourMiniText}"
+                               Foreground="{Binding FiveHourRingBrush}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Margin="10,0,0,0"
+                               Visibility="{Binding FiveHourLimitVisibility}" />
+                    <TextBlock Text="{Binding WeeklyMiniText}"
+                               Foreground="{Binding WeeklyRingBrush}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Margin="10,0,0,0" />
+                </StackPanel>
                 <Button Grid.Column="1"
                         Content="□"
                         Width="20"

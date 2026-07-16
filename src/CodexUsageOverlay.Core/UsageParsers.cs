@@ -25,29 +25,13 @@ public static class UsageParsers
         if (payload is JsonObject payloadObject)
         {
             var rootLimits = payloadObject["rateLimits"] as JsonObject ?? payloadObject;
-            fiveHour = ParseNamedRateLimitMetric(rootLimits, "primary", "5小时额度");
-            weekly = ParseNamedRateLimitMetric(rootLimits, "secondary", "周额度");
+            AssignRateLimitWindow(rootLimits["primary"] as JsonObject, ref fiveHour, ref weekly);
+            AssignRateLimitWindow(rootLimits["secondary"] as JsonObject, ref fiveHour, ref weekly);
         }
 
         foreach (var item in JsonNodeHelpers.FindObjectsInArrays(payload, "limits", "rateLimits", "rate_limits", "windows"))
         {
-            var metric = ParseRateLimitMetric(item);
-            if (!metric.IsAvailable)
-            {
-                continue;
-            }
-
-            var duration = JsonNodeHelpers.DirectNumber(item, "windowDurationMins", "window_duration_mins", "durationMinutes", "duration_minutes");
-            var label = JsonNodeHelpers.DirectString(item, "label", "name", "type", "window")?.ToLowerInvariant() ?? string.Empty;
-
-            if (IsWeekly(duration, label))
-            {
-                weekly ??= metric with { Label = "周额度" };
-            }
-            else if (IsFiveHour(duration, label))
-            {
-                fiveHour ??= metric with { Label = "5小时额度" };
-            }
+            AssignRateLimitWindow(item, ref fiveHour, ref weekly);
         }
 
         return new RateLimitSnapshot(
@@ -144,15 +128,38 @@ public static class UsageParsers
             redeemedAt);
     }
 
-    private static RateLimitMetric? ParseNamedRateLimitMetric(JsonObject root, string propertyName, string label)
+    private static void AssignRateLimitWindow(
+        JsonObject? item,
+        ref RateLimitMetric? fiveHour,
+        ref RateLimitMetric? weekly)
     {
-        if (root[propertyName] is not JsonObject item)
+        if (item is null)
         {
-            return null;
+            return;
         }
 
         var metric = ParseRateLimitMetric(item);
-        return metric.IsAvailable ? metric with { Label = label } : null;
+        if (!metric.IsAvailable)
+        {
+            return;
+        }
+
+        var duration = JsonNodeHelpers.DirectNumber(
+            item,
+            "windowDurationMins",
+            "window_duration_mins",
+            "durationMinutes",
+            "duration_minutes");
+        var label = JsonNodeHelpers.DirectString(item, "label", "name", "type", "window") ?? string.Empty;
+
+        if (IsWeekly(duration, label))
+        {
+            weekly ??= metric with { Label = "周额度" };
+        }
+        else if (IsFiveHour(duration, label))
+        {
+            fiveHour ??= metric with { Label = "5小时额度" };
+        }
     }
 
     private static RateLimitMetric ParseRateLimitMetric(JsonObject item)

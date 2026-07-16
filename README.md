@@ -4,8 +4,8 @@ Windows WPF companion overlay for ChatGPT Codex context usage and rate limits.
 
 ![Preview](images/preview.png)
 
-> ⚠️ The preview image shows an earlier UI. The current build keeps the expanded three-gauge view and a horizontal compact bar; the old vertical compact layout has been removed.
-> ⚠️ 上图为早期界面效果。当前版本保留竖向三圆环的展开模式和横向迷你条，旧的竖版迷你态已移除。
+> ⚠️ The preview image shows an earlier UI. The current build uses an expanded circular-gauge view and a horizontal compact bar; the 5-hour gauge appears only when Codex app-server reports that window.
+> ⚠️ 上图为早期界面效果。当前版本使用圆环展开模式和横向迷你条；只有 Codex app-server 返回 5 小时窗口时，才会显示对应额度。
 
 This plugin does not inject UI into Codex App. Codex plugins do not currently expose a native API for adding controls under the input box, so the visible part is a small local companion window.
 
@@ -17,16 +17,16 @@ Codex Quota Monitor is an **unofficial** Windows companion overlay for the ChatG
 
 ### Features
 
-- Three vertical circular gauges:
+- Up to three vertical circular gauges:
   - Current ChatGPT Codex conversation context remaining.
-  - 5-hour usage limit remaining.
+  - 5-hour usage limit remaining, when that window is available.
   - Weekly usage limit remaining.
-- 5-hour and weekly reset times in expanded mode, plus available reset credits.
-- A horizontal compact bar mode showing context / 5-hour / weekly percentages.
-- A system-tray dot whose color reflects the 5-hour remaining percentage.
+- Reset times for available rate-limit windows in expanded mode, plus available reset credits.
+- A horizontal compact bar showing context and weekly percentages, plus the 5-hour percentage when available.
+- A system-tray dot whose color reflects the 5-hour remaining percentage when available, otherwise the weekly remaining percentage.
 - Color states: green = 60-100% left, yellow = 20-60%, red = under 20%, gray = data unavailable.
 - Reads context usage only from the current ChatGPT Codex session's bottom context indicator using UI Automation text. It does not read tooltips or chat content.
-- Reads 5-hour and weekly limits from Codex app-server rate limit data.
+- Reads and classifies available rate-limit windows from Codex app-server data by their reported duration.
 - Follows the ChatGPT window using a foreground WinEvent hook plus low-frequency fallback polling, so the overlay appears and hides with ChatGPT.
 - Supports Chinese, English, and French based on the Windows UI language.
 - Supports manual collapse/show, hiding to the Windows system tray, dragging, double-click-to-tray, saved window position, and Windows sign-in startup scripts.
@@ -39,7 +39,7 @@ Codex Quota Monitor is an **unofficial** Windows companion overlay for the ChatG
 
 ### Install (prebuilt binary)
 
-1. Download `codex-quota-monitor-win-x64-v0.1.7.zip` from the [latest Release](../../releases/latest).
+1. Download `codex-quota-monitor-win-x64-v0.1.8.zip` from the [latest Release](../../releases/latest).
 2. Extract the zip to any folder, for example `C:\Tools\CodexQuotaMonitor`.
 3. Run `CodexUsageOverlay.App.exe`.
 4. Open ChatGPT and enter Codex. The overlay should appear automatically.
@@ -88,7 +88,7 @@ The overlay remembers its position and collapsed/expanded state.
 ### How It Works
 
 - Context remaining is read from the current Codex app UI indicator via Windows UI Automation.
-- 5-hour and weekly quota values are read from Codex app-server rate limit data over local stdio.
+- Available quota windows are read from Codex app-server rate limit data over local stdio. The 5-hour display hides automatically when that window is not reported and returns if the window becomes available again.
 - The overlay follows the Codex window and hides when Codex is not visible.
 - The app does not send chat messages, does not type commands, does not use `/status`, does not take screenshots or run OCR, and does not move your mouse.
 
@@ -124,16 +124,16 @@ Codex Quota Monitor 是一个**非官方**的 Windows ChatGPT Codex 桌面悬浮
 
 ### 功能
 
-- 竖向三个圆环：
+- 最多显示三个竖向圆环：
   - 当前 ChatGPT Codex 会话上下文剩余容量。
-  - 5 小时额度剩余。
+  - 5 小时额度剩余（仅在该额度窗口可用时显示）。
   - 周额度剩余。
-- 展开模式下显示 5 小时和周额度的刷新时间，以及可用的重置机会次数。
-- 横向迷你条模式：显示上下文 / 5 小时 / 周额度百分比。
-- 托盘模式：小圆点，颜色按 5 小时额度剩余百分比变化。
+- 展开模式下显示当前可用额度窗口的刷新时间，以及可用的重置机会次数。
+- 横向迷你条模式：显示上下文和周额度；5 小时窗口可用时再显示其百分比。
+- 托盘模式：优先按 5 小时额度剩余百分比着色；没有 5 小时窗口时改用周额度颜色。
 - 颜色含义：绿色 = 剩余 60-100%，黄色 = 20-60%，红色 = 低于 20%，灰色 = 数据不可用。
 - 上下文容量只从当前 ChatGPT Codex 会话底部的上下文指示器（UI Automation 文本）读取，不读取提示气泡或聊天内容。
-- 5 小时额度和周额度从 Codex app-server 的 rate limits 数据读取。
+- 从 Codex app-server 的 rate limits 数据读取并按窗口时长识别当前可用额度。
 - 通过 foreground WinEvent hook 加低频兜底轮询跟随 ChatGPT 窗口，悬浮窗随 ChatGPT 显示/隐藏。
 - 按 Windows 界面语言自动选择中文、英文、法语。
 - 支持手动折叠/显示、隐藏到托盘、拖拽、双击隐藏到托盘、记住窗口位置、Windows 登录启动脚本。
@@ -146,7 +146,7 @@ Codex Quota Monitor 是一个**非官方**的 Windows ChatGPT Codex 桌面悬浮
 
 ### 安装（预编译二进制）
 
-1. 从 [最新 Release](../../releases/latest) 下载 `codex-quota-monitor-win-x64-v0.1.7.zip`。
+1. 从 [最新 Release](../../releases/latest) 下载 `codex-quota-monitor-win-x64-v0.1.8.zip`。
 2. 解压到任意文件夹，例如 `C:\Tools\CodexQuotaMonitor`。
 3. 运行 `CodexUsageOverlay.App.exe`。
 4. 打开 ChatGPT 并进入 Codex，悬浮窗会自动出现。

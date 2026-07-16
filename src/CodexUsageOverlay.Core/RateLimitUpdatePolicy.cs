@@ -21,8 +21,8 @@ public static class RateLimitUpdatePolicy
     public static RateLimitSnapshot MergeSparse(
         RateLimitSnapshot? previous,
         RateLimitSnapshot incoming,
-        bool hasPrimary,
-        bool hasSecondary)
+        bool hasFiveHour,
+        bool hasWeekly)
     {
         if (previous is null)
         {
@@ -30,7 +30,7 @@ public static class RateLimitUpdatePolicy
         }
 
         return new RateLimitSnapshot(
-            hasPrimary ? incoming.FiveHour : previous.FiveHour,
-            hasSecondary ? incoming.Weekly : previous.Weekly);
+            hasFiveHour ? incoming.FiveHour : previous.FiveHour,
+            hasWeekly ? incoming.Weekly : previous.Weekly);
     }
 }

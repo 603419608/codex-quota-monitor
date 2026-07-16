@@ -15,7 +15,9 @@ public partial class MainWindow : Window
 {
     private const double FullWidth = 230;
     private const double FullHeight = 520;
+    private const double FullHeightWithoutFiveHour = 390;
     private const double MiniWidth = 330;
+    private const double ChineseMiniWidthWithoutFiveHour = 220;
     private const double MiniHeight = 48;
     private static readonly TimeSpan HideDebounce = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan PositionSaveDebounce = TimeSpan.FromMilliseconds(500);
@@ -156,7 +158,8 @@ public partial class MainWindow : Window
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(OverlayViewModel.IsCollapsed))
+        if (e.PropertyName == nameof(OverlayViewModel.IsCollapsed) ||
+            e.PropertyName == nameof(OverlayViewModel.FiveHourLimitVisibility))
         {
             ApplyWindowMode();
         }
@@ -301,17 +304,26 @@ public partial class MainWindow : Window
     {
         if (_viewModel.IsCollapsed)
         {
-            MinWidth = MiniWidth;
+            var miniWidth = _viewModel.FiveHourLimitVisibility == Visibility.Visible
+                ? MiniWidth
+                : string.Equals(
+                    System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName,
+                    "zh",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? ChineseMiniWidthWithoutFiveHour
+                    : MiniWidth;
+            MinWidth = miniWidth;
             MinHeight = MiniHeight;
-            Width = MiniWidth;
+            Width = miniWidth;
             Height = MiniHeight;
         }
         else
         {
+            var hasFiveHourLimit = _viewModel.FiveHourLimitVisibility == Visibility.Visible;
             MinWidth = 220;
-            MinHeight = 500;
+            MinHeight = hasFiveHourLimit ? 500 : 370;
             Width = FullWidth;
-            Height = FullHeight;
+            Height = hasFiveHourLimit ? FullHeight : FullHeightWithoutFiveHour;
         }
 
         KeepWindowInsideWorkArea();

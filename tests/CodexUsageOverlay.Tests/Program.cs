@@ -13,6 +13,8 @@ var tests = new (string Name, Action Run)[]
     ("status text parser ignores bare percentages", StatusTextParserIgnoresBarePercentages),
     ("rate limit parser classifies five hour and weekly windows", RateLimitParserClassifiesWindows),
     ("rate limit parser reads app-server primary secondary shape", RateLimitParserReadsPrimarySecondaryShape),
+    ("rate limit parser treats a weekly primary as weekly only", RateLimitParserTreatsWeeklyPrimaryAsWeeklyOnly),
+    ("rate limit parser restores five hour when its window returns", RateLimitParserRestoresFiveHourWhenWindowReturns),
     ("rate limit parser reads reset timestamps", RateLimitParserReadsResetTimestamps),
     ("rate limit parser treats one as one percent", RateLimitParserTreatsOneAsOnePercent),
     ("rate limit parser treats fractional used percent as percent", RateLimitParserTreatsFractionalUsedPercentAsPercent),
@@ -20,8 +22,8 @@ var tests = new (string Name, Action Run)[]
     ("rate limit parser reads remaining and limit shape", RateLimitParserReadsRemainingAndLimitShape),
     ("rate limit update rejects model bucket", RateLimitUpdateRejectsModelBucket),
     ("rate limit update accepts total bucket", RateLimitUpdateAcceptsTotalBucket),
-    ("rate limit update preserves weekly on primary-only update", RateLimitUpdatePreservesWeeklyOnPrimaryOnlyUpdate),
-    ("rate limit update preserves five hour on secondary-only update", RateLimitUpdatePreservesFiveHourOnSecondaryOnlyUpdate),
+    ("rate limit update preserves weekly on five-hour-only update", RateLimitUpdatePreservesWeeklyOnFiveHourOnlyUpdate),
+    ("rate limit update preserves five hour on weekly-only update", RateLimitUpdatePreservesFiveHourOnWeeklyOnlyUpdate),
     ("rate limit update rejects notification without id", RateLimitUpdateRejectsNotificationWithoutId),
     ("rate limit update rejects identified bucket before baseline", RateLimitUpdateRejectsIdentifiedBucketBeforeBaseline),
     ("rate limit update rejects when both ids missing", RateLimitUpdateRejectsWhenBothIdsMissing),
@@ -160,6 +162,52 @@ static void RateLimitParserReadsPrimarySecondaryShape()
     AssertNear(88, limits.Weekly.RemainingPercent, 0.01, "weekly remaining from used percent");
 }
 
+static void RateLimitParserTreatsWeeklyPrimaryAsWeeklyOnly()
+{
+    var json = JsonNode.Parse("""
+    {
+      "result": {
+        "rateLimits": {
+          "primary": {
+            "usedPercent": 14,
+            "windowDurationMins": 10080,
+            "resetsAt": 1782344086
+          },
+          "secondary": null
+        }
+      }
+    }
+    """);
+
+    var limits = UsageParsers.ParseRateLimits(json);
+    AssertTrue(!limits.FiveHour.IsAvailable, "five hour limit should be unavailable when no five-hour window exists");
+    AssertTrue(limits.Weekly.IsAvailable, "weekly primary should be classified as the weekly limit");
+    AssertNear(86, limits.Weekly.RemainingPercent, 0.01, "weekly remaining from primary window");
+    AssertTrue(limits.Weekly.ResetsAt == DateTimeOffset.FromUnixTimeSeconds(1782344086), "weekly primary reset timestamp");
+}
+
+static void RateLimitParserRestoresFiveHourWhenWindowReturns()
+{
+    var json = JsonNode.Parse("""
+    {
+      "result": {
+        "rateLimits": {
+          "primary": {
+            "usedPercent": 14,
+            "windowDurationMins": 300
+          },
+          "secondary": null
+        }
+      }
+    }
+    """);
+
+    var limits = UsageParsers.ParseRateLimits(json);
+    AssertTrue(limits.FiveHour.IsAvailable, "five hour limit should return when a five-hour window is present");
+    AssertTrue(!limits.Weekly.IsAvailable, "weekly limit should remain unavailable when no weekly window exists");
+    AssertNear(86, limits.FiveHour.RemainingPercent, 0.01, "restored five hour remaining");
+}
+
 static void RateLimitParserReadsResetTimestamps()
 {
     var json = JsonNode.Parse("""
@@ -281,34 +329,34 @@ static void RateLimitUpdateAcceptsTotalBucket()
     var merged = RateLimitUpdatePolicy.MergeSparse(
         CreateRateLimitSnapshot(90, 80),
         CreateRateLimitSnapshot(75, 65),
-        hasPrimary: true,
-        hasSecondary: true);
+        hasFiveHour: true,
+        hasWeekly: true);
     AssertNear(75, merged.FiveHour.RemainingPercent, 0.01, "accepted total bucket five hour update");
     AssertNear(65, merged.Weekly.RemainingPercent, 0.01, "accepted total bucket weekly update");
 }
 
-static void RateLimitUpdatePreservesWeeklyOnPrimaryOnlyUpdate()
+static void RateLimitUpdatePreservesWeeklyOnFiveHourOnlyUpdate()
 {
     var merged = RateLimitUpdatePolicy.MergeSparse(
         CreateRateLimitSnapshot(90, 80),
         CreateRateLimitSnapshot(70, 0),
-        hasPrimary: true,
-        hasSecondary: false);
+        hasFiveHour: true,
+        hasWeekly: false);
 
-    AssertNear(70, merged.FiveHour.RemainingPercent, 0.01, "primary-only five hour update");
-    AssertNear(80, merged.Weekly.RemainingPercent, 0.01, "primary-only update should preserve weekly");
+    AssertNear(70, merged.FiveHour.RemainingPercent, 0.01, "five-hour-only update");
+    AssertNear(80, merged.Weekly.RemainingPercent, 0.01, "five-hour-only update should preserve weekly");
 }
 
-static void RateLimitUpdatePreservesFiveHourOnSecondaryOnlyUpdate()
+static void RateLimitUpdatePreservesFiveHourOnWeeklyOnlyUpdate()
 {
     var merged = RateLimitUpdatePolicy.MergeSparse(
         CreateRateLimitSnapshot(90, 80),
         CreateRateLimitSnapshot(0, 60),
-        hasPrimary: false,
-        hasSecondary: true);
+        hasFiveHour: false,
+        hasWeekly: true);
 
-    AssertNear(90, merged.FiveHour.RemainingPercent, 0.01, "secondary-only update should preserve five hour");
-    AssertNear(60, merged.Weekly.RemainingPercent, 0.01, "secondary-only weekly update");
+    AssertNear(90, merged.FiveHour.RemainingPercent, 0.01, "weekly-only update should preserve five hour");
+    AssertNear(60, merged.Weekly.RemainingPercent, 0.01, "weekly-only update");
 }
 
 static void RateLimitUpdateRejectsNotificationWithoutId()
@@ -355,8 +403,8 @@ static void RateLimitUpdateMergeSparseKeepsMissingSideUnavailableWithNoPrevious(
     var merged = RateLimitUpdatePolicy.MergeSparse(
         previous: null,
         incoming,
-        hasPrimary: true,
-        hasSecondary: false);
+        hasFiveHour: true,
+        hasWeekly: false);
 
     AssertTrue(merged.FiveHour.IsAvailable, "five hour metric from the notification should be available");
     AssertTrue(!merged.Weekly.IsAvailable, "weekly metric missing from the notification stays unavailable when there is no previous snapshot");
