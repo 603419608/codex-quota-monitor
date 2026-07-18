@@ -7,20 +7,25 @@ public sealed class CodexStatusReader
 {
     public Task<ContextUsage> ReadCurrentContextAsync(CancellationToken cancellationToken = default)
     {
-        return Task.Run(ReadCurrentContext, cancellationToken);
+        return Task.Run(() => ReadCurrentContext(cancellationToken), cancellationToken);
     }
 
-    private static ContextUsage ReadCurrentContext()
+    private static ContextUsage ReadCurrentContext(CancellationToken cancellationToken)
     {
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var window = CodexWindowDetector.FindCodexWindow();
             if (window is null)
             {
                 return ContextUsage.Waiting;
             }
 
-            return FindContextUsage(window);
+            return FindContextUsage(window, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
@@ -28,8 +33,12 @@ public sealed class CodexStatusReader
         }
     }
 
-    private static ContextUsage FindContextUsage(AutomationElement window)
+    private static ContextUsage FindContextUsage(
+        AutomationElement window,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         // window comes from FindCodexWindow and is still a live element. Only the cached descendants below use Cached.*.
         var windowBounds = window.Current.BoundingRectangle;
 
@@ -53,6 +62,8 @@ public sealed class CodexStatusReader
 
         foreach (AutomationElement element in descendants)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             string name;
             System.Windows.Rect bounds;
             try

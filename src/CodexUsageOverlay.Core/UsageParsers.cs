@@ -35,8 +35,8 @@ public static class UsageParsers
         }
 
         return new RateLimitSnapshot(
-            fiveHour ?? RateLimitMetric.Unavailable("5小时额度"),
-            weekly ?? RateLimitMetric.Unavailable("周额度"));
+            fiveHour ?? RateLimitMetric.Unavailable,
+            weekly ?? RateLimitMetric.Unavailable);
     }
 
     public static ContextUsage ParseStatusText(string? text)
@@ -57,6 +57,28 @@ public static class UsageParsers
         }
 
         return ContextUsage.Waiting;
+    }
+
+    public static AccountUsageSnapshot ParseAccountUsage(JsonNode? accountMessage, JsonNode? usageMessage)
+    {
+        var accountPayload = JsonNodeHelpers.Payload(accountMessage) as JsonObject;
+        var account = accountPayload?["account"] as JsonObject ?? accountPayload;
+        var displayName = account is null
+            ? null
+            : JsonNodeHelpers.DirectString(account, "displayName", "display_name", "name");
+        var email = account is null
+            ? null
+            : JsonNodeHelpers.DirectString(account, "email");
+
+        var usagePayload = JsonNodeHelpers.Payload(usageMessage) as JsonObject;
+        var summary = usagePayload?["summary"] as JsonObject;
+        var lifetimeTokens = summary is null
+            ? null
+            : DirectInt64(summary, "lifetimeTokens", "lifetime_tokens");
+
+        return lifetimeTokens is >= 0
+            ? new AccountUsageSnapshot(true, displayName, email, lifetimeTokens.Value)
+            : AccountUsageSnapshot.Unavailable;
     }
 
     public static ResetCreditSnapshot ParseResetCredits(JsonNode? message, DateTimeOffset? fetchedAt = null)
@@ -109,6 +131,40 @@ public static class UsageParsers
             double.TryParse(match.Groups["percent"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out percent);
     }
 
+    private static long? DirectInt64(JsonObject obj, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!obj.TryGetPropertyValue(name, out var node) || node is null)
+            {
+                continue;
+            }
+
+            if (node is JsonValue value)
+            {
+                if (value.TryGetValue<long>(out var integer))
+                {
+                    return integer;
+                }
+
+                if (value.TryGetValue<double>(out var number) &&
+                    double.IsFinite(number) &&
+                    number >= long.MinValue &&
+                    number <= long.MaxValue)
+                {
+                    return Convert.ToInt64(Math.Round(number));
+                }
+            }
+
+            if (long.TryParse(node.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
     private static ResetCreditItem? ParseResetCreditItem(ResetCreditItemDto item)
     {
         var grantedAt = ParseDateTimeOffset(item.GrantedAt);
@@ -154,17 +210,16 @@ public static class UsageParsers
 
         if (IsWeekly(duration, label))
         {
-            weekly ??= metric with { Label = "周额度" };
+            weekly ??= metric;
         }
         else if (IsFiveHour(duration, label))
         {
-            fiveHour ??= metric with { Label = "5小时额度" };
+            fiveHour ??= metric;
         }
     }
 
     private static RateLimitMetric ParseRateLimitMetric(JsonObject item)
     {
-        var label = JsonNodeHelpers.DirectString(item, "label", "name", "type", "window") ?? "额度";
         var usedPercent = NormalizeUsedPercent(JsonNodeHelpers.DirectNumber(item, "usedPercent", "used_percent", "percentUsed", "percent_used"));
         var remainingPercent = NormalizeRemainingPercent(JsonNodeHelpers.DirectNumber(item, "remainingPercent", "remaining_percent", "percentRemaining", "percent_remaining"));
         var resetsAt = ParseResetsAt(item);
@@ -189,13 +244,11 @@ public static class UsageParsers
 
         if (!usedPercent.HasValue && !remainingPercent.HasValue)
         {
-            return RateLimitMetric.Unavailable(label);
+            return RateLimitMetric.Unavailable;
         }
 
         return new RateLimitMetric(
             true,
-            label,
-            Clamp(usedPercent ?? 0, 0, 100),
             Clamp(remainingPercent ?? 0, 0, 100),
             resetsAt);
     }

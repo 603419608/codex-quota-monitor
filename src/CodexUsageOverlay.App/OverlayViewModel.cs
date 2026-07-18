@@ -54,12 +54,16 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
     private string _resetCreditsTrayText = string.Empty;
     private string? _resetCreditsTooltipText;
     private string? _miniResetTooltipText;
+    private string _accountNameText = string.Empty;
+    private string _lifetimeTokensText = string.Empty;
+    private string _accountTooltipText = string.Empty;
     private string _trayTooltipText = $"{Text.ContextShort} --   {Text.WeeklyShort} --";
     private double? _trayStatusPercent;
     private Visibility _fiveHourLimitVisibility = Visibility.Collapsed;
     private Visibility _fiveHourResetVisibility = Visibility.Collapsed;
     private Visibility _weeklyResetVisibility = Visibility.Collapsed;
     private Visibility _resetCreditsVisibility = Visibility.Collapsed;
+    private Visibility _accountSummaryVisibility = Visibility.Collapsed;
     private Brush _contextRingBrush = UnavailableBrush;
     private Brush _fiveHourRingBrush = UnavailableBrush;
     private Brush _weeklyRingBrush = UnavailableBrush;
@@ -92,6 +96,7 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
         _isCollapsed = settings.IsCollapsed;
 
         _bridge.RateLimitsChanged += limits => Dispatch(() => ApplyRateLimits(limits));
+        _bridge.AccountUsageChanged += usage => Dispatch(() => ApplyAccountUsage(usage));
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -178,6 +183,18 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
         set => SetField(ref _miniResetTooltipText, value);
     }
 
+    public string AccountNameText
+    {
+        get => _accountNameText;
+        set => SetField(ref _accountNameText, value);
+    }
+
+    public string LifetimeTokensText
+    {
+        get => _lifetimeTokensText;
+        set => SetField(ref _lifetimeTokensText, value);
+    }
+
     public string TrayTooltipText
     {
         get => _trayTooltipText;
@@ -212,6 +229,12 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         get => _resetCreditsVisibility;
         set => SetField(ref _resetCreditsVisibility, value);
+    }
+
+    public Visibility AccountSummaryVisibility
+    {
+        get => _accountSummaryVisibility;
+        set => SetField(ref _accountSummaryVisibility, value);
     }
 
     public bool CanRefreshResetCredits => !_isResetCreditsRefreshing && !IsManualResetCreditCooldownActive();
@@ -405,6 +428,27 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
         FiveHourRingBrush = fiveHour.IsAvailable ? BrushForRemaining(fiveHour.RemainingPercent) : UnavailableBrush;
         WeeklyRingBrush = weekly.IsAvailable ? BrushForRemaining(weekly.RemainingPercent) : UnavailableBrush;
         UpdateMiniSummary();
+    }
+
+    private void ApplyAccountUsage(AccountUsageSnapshot usage)
+    {
+        if (!usage.IsAvailable)
+        {
+            return;
+        }
+
+        AccountNameText = !string.IsNullOrWhiteSpace(usage.DisplayName)
+            ? usage.DisplayName
+            : usage.Email ?? string.Empty;
+        LifetimeTokensText = string.Format(
+            CultureInfo.CurrentCulture,
+            Text.LifetimeTokensFormat,
+            FormatLifetimeTokens(usage.LifetimeTokens));
+        _accountTooltipText = string.IsNullOrWhiteSpace(AccountNameText)
+            ? LifetimeTokensText
+            : AccountNameText + Environment.NewLine + LifetimeTokensText;
+        AccountSummaryVisibility = Visibility.Visible;
+        UpdateMiniResetTooltip();
     }
 
     private static RateLimitMetric ResolveMetric(
@@ -733,12 +777,17 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
             parts.Add(ResetCreditsSummaryText);
         }
 
-        MiniResetTooltipText = parts.Count switch
+        var resetTooltip = parts.Count switch
         {
             0 => null,
             <= 2 => string.Join("    ", parts),
             _ => string.Join("    ", parts.Take(2)) + Environment.NewLine + parts[2]
         };
+        MiniResetTooltipText = string.IsNullOrWhiteSpace(_accountTooltipText)
+            ? resetTooltip
+            : string.IsNullOrWhiteSpace(resetTooltip)
+                ? _accountTooltipText
+                : resetTooltip + Environment.NewLine + _accountTooltipText;
         UpdateTraySummary();
     }
 
@@ -795,6 +844,44 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
         return delay > TimeSpan.FromMinutes(1) ? delay : TimeSpan.FromMinutes(1);
     }
 
+    private static string FormatLifetimeTokens(long tokens)
+    {
+        var culture = CultureInfo.CurrentCulture;
+        var language = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+        if (language == "zh")
+        {
+            if (tokens >= 100_000_000)
+            {
+                return $"{(tokens / 100_000_000d).ToString("0.#", culture)}亿";
+            }
+
+            if (tokens >= 10_000)
+            {
+                return $"{(tokens / 10_000d).ToString("0.#", culture)}万";
+            }
+
+            return tokens.ToString("N0", culture);
+        }
+
+        var billionSuffix = language == "fr" ? " Md" : "B";
+        if (tokens >= 1_000_000_000)
+        {
+            return $"{(tokens / 1_000_000_000d).ToString("0.##", culture)}{billionSuffix}";
+        }
+
+        if (tokens >= 1_000_000)
+        {
+            return $"{(tokens / 1_000_000d).ToString("0.##", culture)}M";
+        }
+
+        if (tokens >= 1_000)
+        {
+            return $"{(tokens / 1_000d).ToString("0.##", culture)}K";
+        }
+
+        return tokens.ToString("N0", culture);
+    }
+
     private static Brush BrushForRemaining(double remainingPercent)
     {
         if (remainingPercent < 20) return RedBrush;
@@ -834,9 +921,18 @@ public sealed class OverlayViewModel : INotifyPropertyChanged, IAsyncDisposable
         summaryParts.Add(WeeklyMiniText);
         var summary = string.Join(" · ", summaryParts);
 
-        TrayTooltipText = string.IsNullOrWhiteSpace(_resetCreditsTrayText)
-            ? summary
-            : summary + Environment.NewLine + _resetCreditsTrayText;
+        var trayLines = new List<string>(3) { summary };
+        if (!string.IsNullOrWhiteSpace(LifetimeTokensText))
+        {
+            trayLines.Add(LifetimeTokensText);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_resetCreditsTrayText))
+        {
+            trayLines.Add(_resetCreditsTrayText);
+        }
+
+        TrayTooltipText = string.Join(Environment.NewLine, trayLines);
         TrayStatusPercent = _lastRateLimits.FiveHour.IsAvailable
             ? _lastRateLimits.FiveHour.RemainingPercent
             : _lastRateLimits.Weekly.IsAvailable

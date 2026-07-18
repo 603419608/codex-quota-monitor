@@ -11,6 +11,12 @@ var tests = new (string Name, Action Run)[]
     ("status text parser reads English context left indicator", StatusTextParserReadsEnglishContextLeftIndicator),
     ("status text parser reads Chinese context remaining indicator", StatusTextParserReadsChineseContextRemainingIndicator),
     ("status text parser ignores bare percentages", StatusTextParserIgnoresBarePercentages),
+    ("account usage parser reads email and lifetime tokens", AccountUsageParserReadsEmailAndLifetimeTokens),
+    ("account usage parser prefers display name", AccountUsageParserPrefersDisplayName),
+    ("account usage parser rejects missing lifetime tokens", AccountUsageParserRejectsMissingLifetimeTokens),
+    ("OAuth profile reader reads name claim", OAuthProfileReaderReadsNameClaim),
+    ("OAuth profile reader ignores missing name claim", OAuthProfileReaderIgnoresMissingNameClaim),
+    ("OAuth profile reader ignores malformed token", OAuthProfileReaderIgnoresMalformedToken),
     ("rate limit parser classifies five hour and weekly windows", RateLimitParserClassifiesWindows),
     ("rate limit parser reads app-server primary secondary shape", RateLimitParserReadsPrimarySecondaryShape),
     ("rate limit parser treats a weekly primary as weekly only", RateLimitParserTreatsWeeklyPrimaryAsWeeklyOnly),
@@ -20,6 +26,7 @@ var tests = new (string Name, Action Run)[]
     ("rate limit parser treats fractional used percent as percent", RateLimitParserTreatsFractionalUsedPercentAsPercent),
     ("rate limit parser preserves sub-one used percent near reset", RateLimitParserPreservesSubOneUsedPercentNearReset),
     ("rate limit parser reads remaining and limit shape", RateLimitParserReadsRemainingAndLimitShape),
+    ("rate limit parser reads invariant numeric strings", RateLimitParserReadsInvariantNumericStrings),
     ("rate limit update rejects model bucket", RateLimitUpdateRejectsModelBucket),
     ("rate limit update accepts total bucket", RateLimitUpdateAcceptsTotalBucket),
     ("rate limit update preserves weekly on five-hour-only update", RateLimitUpdatePreservesWeeklyOnFiveHourOnlyUpdate),
@@ -114,6 +121,102 @@ static void StatusTextParserIgnoresBarePercentages()
 
     var random = UsageParsers.ParseStatusText("random 58% text");
     AssertTrue(!random.IsAvailable, "random percent text should not be parsed as context usage");
+}
+
+static void AccountUsageParserReadsEmailAndLifetimeTokens()
+{
+    var account = JsonNode.Parse("""
+    {
+      "account": {
+        "type": "chatgpt",
+        "email": "user@example.com",
+        "planType": "pro"
+      }
+    }
+    """);
+    var usage = JsonNode.Parse("""
+    {
+      "summary": {
+        "lifetimeTokens": 2340720277,
+        "peakDailyTokens": 112621176
+      },
+      "dailyUsageBuckets": []
+    }
+    """);
+
+    var snapshot = UsageParsers.ParseAccountUsage(account, usage);
+    AssertTrue(snapshot.IsAvailable, "account usage should be available");
+    AssertTrue(snapshot.DisplayName is null, "display name should remain optional");
+    AssertTrue(snapshot.Email == "user@example.com", "email fallback");
+    AssertTrue(snapshot.LifetimeTokens == 2_340_720_277, "lifetime token total");
+}
+
+static void AccountUsageParserPrefersDisplayName()
+{
+    var account = JsonNode.Parse("""
+    {
+      "account": {
+        "displayName": "Deng GuoChao",
+        "email": "user@example.com"
+      }
+    }
+    """);
+    var usage = JsonNode.Parse("""
+    {
+      "summary": { "lifetime_tokens": 42 }
+    }
+    """);
+
+    var snapshot = UsageParsers.ParseAccountUsage(account, usage);
+    AssertTrue(snapshot.IsAvailable, "account usage should be available");
+    AssertTrue(snapshot.DisplayName == "Deng GuoChao", "display name");
+    AssertTrue(snapshot.Email == "user@example.com", "email remains available as fallback");
+    AssertTrue(snapshot.LifetimeTokens == 42, "snake-case lifetime token total");
+}
+
+static void AccountUsageParserRejectsMissingLifetimeTokens()
+{
+    var account = JsonNode.Parse("""{ "account": { "email": "user@example.com" } }""");
+    var usage = JsonNode.Parse("""{ "summary": { "peakDailyTokens": 123 } }""");
+
+    var snapshot = UsageParsers.ParseAccountUsage(account, usage);
+    AssertTrue(!snapshot.IsAvailable, "missing lifetime total should not render as zero");
+}
+
+static void OAuthProfileReaderReadsNameClaim()
+{
+    var token = CreateUnsignedIdToken("""{ "name": "  Deng GuoChao  " }""");
+    var displayName = OAuthProfileReader.ParseDisplayNameFromIdToken(token);
+
+    AssertTrue(displayName == "Deng GuoChao", "name claim should be trimmed and returned");
+}
+
+static void OAuthProfileReaderIgnoresMissingNameClaim()
+{
+    var token = CreateUnsignedIdToken("""{ "email": "user@example.com" }""");
+    var displayName = OAuthProfileReader.ParseDisplayNameFromIdToken(token);
+
+    AssertTrue(displayName is null, "email must not be treated as a display name");
+}
+
+static void OAuthProfileReaderIgnoresMalformedToken()
+{
+    var displayName = OAuthProfileReader.ParseDisplayNameFromIdToken("not-a-jwt");
+
+    AssertTrue(displayName is null, "malformed tokens should safely fall back to email");
+}
+
+static string CreateUnsignedIdToken(string payload)
+{
+    static string Encode(string value)
+    {
+        return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(value))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
+
+    return $"{Encode("""{ "alg": "none" }""")}.{Encode(payload)}.";
 }
 
 static void RateLimitParserClassifiesWindows()
@@ -312,6 +415,31 @@ static void RateLimitParserReadsRemainingAndLimitShape()
     AssertNear(89, limits.Weekly.RemainingPercent, 0.01, "weekly remaining from remaining/limit");
 }
 
+static void RateLimitParserReadsInvariantNumericStrings()
+{
+    var previousCulture = System.Globalization.CultureInfo.CurrentCulture;
+    try
+    {
+        System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+        var json = JsonNode.Parse("""
+        {
+          "result": {
+            "limits": [
+              { "windowDurationMins": 10080, "remainingPercent": "0.6" }
+            ]
+          }
+        }
+        """);
+
+        var limits = UsageParsers.ParseRateLimits(json);
+        AssertNear(60, limits.Weekly.RemainingPercent, 0.01, "invariant numeric string under French culture");
+    }
+    finally
+    {
+        System.Globalization.CultureInfo.CurrentCulture = previousCulture;
+    }
+}
+
 static void RateLimitUpdateRejectsModelBucket()
 {
     var accepted = RateLimitUpdatePolicy.ShouldAcceptRateLimitNotification(
@@ -397,8 +525,8 @@ static void RateLimitUpdateRejectsWhitespaceNotificationId()
 static void RateLimitUpdateMergeSparseKeepsMissingSideUnavailableWithNoPrevious()
 {
     var incoming = new RateLimitSnapshot(
-        new RateLimitMetric(true, "5 hour", 10, 90, null),
-        RateLimitMetric.Unavailable("weekly"));
+        new RateLimitMetric(true, 90, null),
+        RateLimitMetric.Unavailable);
 
     var merged = RateLimitUpdatePolicy.MergeSparse(
         previous: null,
@@ -413,8 +541,8 @@ static void RateLimitUpdateMergeSparseKeepsMissingSideUnavailableWithNoPrevious(
 static RateLimitSnapshot CreateRateLimitSnapshot(double fiveHourRemaining, double weeklyRemaining)
 {
     return new RateLimitSnapshot(
-        new RateLimitMetric(true, "5 hour", 100 - fiveHourRemaining, fiveHourRemaining, null),
-        new RateLimitMetric(true, "weekly", 100 - weeklyRemaining, weeklyRemaining, null));
+        new RateLimitMetric(true, fiveHourRemaining, null),
+        new RateLimitMetric(true, weeklyRemaining, null));
 }
 
 static void ResetCreditParserReadsAvailableCountAndExpirations()

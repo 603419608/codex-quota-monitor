@@ -11,7 +11,7 @@ public static class CodexWindowDetector
     {
         try
         {
-            return FindCodexWindow() is not null;
+            return FindCodexWindowHandle() != IntPtr.Zero;
         }
         catch
         {
@@ -21,12 +21,6 @@ public static class CodexWindowDetector
 
     public static AutomationElement? FindCodexWindow()
     {
-        var window = FindCodexWindowByAutomation();
-        if (window is not null)
-        {
-            return window;
-        }
-
         var handle = FindCodexWindowHandle();
         if (handle != IntPtr.Zero)
         {
@@ -39,7 +33,7 @@ public static class CodexWindowDetector
             }
         }
 
-        return null;
+        return FindCodexWindowByAutomation();
     }
 
     private static AutomationElement? FindCodexWindowByAutomation()
@@ -224,7 +218,6 @@ public sealed class CodexWindowWatcher : IDisposable
     private readonly IntPtr _foregroundHook;
     private readonly SemaphoreSlim _wake = new(0, 1);
     private readonly CancellationTokenSource _cts = new();
-    private readonly Task _detectionLoop;
     private volatile bool _lastAvailability;
     private volatile bool _isDisposed;
 
@@ -250,7 +243,7 @@ public sealed class CodexWindowWatcher : IDisposable
             0,
             WineventOutOfContext | WineventSkipOwnProcess);
 
-        _detectionLoop = Task.Run(() => RunDetectionLoopAsync(_cts.Token));
+        _ = Task.Run(() => RunDetectionLoopAsync(_cts.Token));
     }
 
     public bool CurrentAvailability => _lastAvailability;

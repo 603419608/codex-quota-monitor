@@ -5,6 +5,7 @@ namespace CodexUsageOverlay.Core;
 public sealed class CodexAppServerBridge : IAsyncDisposable
 {
     private static readonly TimeSpan RateLimitPollingInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan AccountUsagePollingInterval = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan InitialReconnectDelay = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaxReconnectDelay = TimeSpan.FromMinutes(5);
 
@@ -13,7 +14,9 @@ public sealed class CodexAppServerBridge : IAsyncDisposable
     private readonly object _reconnectSync = new();
     private readonly object _snapshotSync = new();
     private readonly AppServerClient? _initialClient;
+    private readonly OAuthProfileReader _profileReader = new();
     private Task? _rateLimitPollingTask;
+    private Task? _accountUsagePollingTask;
     private Task? _reconnectTask;
     private AppServerClient? _client;
     private RateLimitSnapshot? _lastGoodSnapshot;
@@ -28,16 +31,19 @@ public sealed class CodexAppServerBridge : IAsyncDisposable
     }
 
     public event Action<RateLimitSnapshot>? RateLimitsChanged;
+    public event Action<AccountUsageSnapshot>? AccountUsageChanged;
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
         _rateLimitPollingTask = Task.Run(() => PollRateLimitsAsync(_cts.Token));
+        _accountUsagePollingTask = Task.Run(() => PollAccountUsageAsync(_cts.Token));
 
         try
         {
             await ConnectAndReplaceClientAsync(linked.Token);
             await RefreshRateLimitsAsync(linked.Token);
+            await RefreshAccountUsageAsync(linked.Token);
         }
         catch (OperationCanceledException) when (linked.Token.IsCancellationRequested)
         {
@@ -121,6 +127,70 @@ public sealed class CodexAppServerBridge : IAsyncDisposable
             {
                 return;
             }
+        }
+    }
+
+    private async Task PollAccountUsageAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(AccountUsagePollingInterval, cancellationToken);
+                await RefreshAccountUsageAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    private async Task<bool> RefreshAccountUsageAsync(CancellationToken cancellationToken)
+    {
+        var client = _client;
+        if (client is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var account = await client.SendRequestAsync(
+                "account/read",
+                new JsonObject { ["refreshToken"] = false },
+                cancellationToken);
+            var usage = await client.SendRequestAsync(
+                "account/usage/read",
+                new JsonObject(),
+                cancellationToken);
+            var snapshot = UsageParsers.ParseAccountUsage(account, usage);
+            if (!snapshot.IsAvailable)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(snapshot.DisplayName))
+            {
+                var localDisplayName = await _profileReader.ReadDisplayNameAsync(cancellationToken);
+                if (!string.IsNullOrWhiteSpace(localDisplayName))
+                {
+                    snapshot = snapshot with { DisplayName = localDisplayName };
+                }
+            }
+
+            AccountUsageChanged?.Invoke(snapshot);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // Account usage is supplementary. Keep the last good UI and let the
+            // low-frequency poll retry without reconnecting a healthy app-server.
+            return false;
         }
     }
 
@@ -217,6 +287,7 @@ public sealed class CodexAppServerBridge : IAsyncDisposable
                 await ConnectAndReplaceClientAsync(cancellationToken);
                 if (await RefreshRateLimitsAsync(cancellationToken, scheduleReconnectOnFailure: false))
                 {
+                    await RefreshAccountUsageAsync(cancellationToken);
                     return;
                 }
 
@@ -299,6 +370,17 @@ public sealed class CodexAppServerBridge : IAsyncDisposable
             try
             {
                 await _rateLimitPollingTask;
+            }
+            catch
+            {
+            }
+        }
+
+        if (_accountUsagePollingTask is not null)
+        {
+            try
+            {
+                await _accountUsagePollingTask;
             }
             catch
             {

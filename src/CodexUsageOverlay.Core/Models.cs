@@ -7,19 +7,17 @@ public sealed record ContextUsage(bool IsAvailable, double UsedPercent)
 
 public sealed record RateLimitMetric(
     bool IsAvailable,
-    string Label,
-    double UsedPercent,
     double RemainingPercent,
     DateTimeOffset? ResetsAt)
 {
-    public static RateLimitMetric Unavailable(string label) => new(false, label, 0, 0, null);
+    public static RateLimitMetric Unavailable { get; } = new(false, 0, null);
 }
 
 public sealed record RateLimitSnapshot(RateLimitMetric FiveHour, RateLimitMetric Weekly)
 {
     public static RateLimitSnapshot Waiting { get; } = new(
-        RateLimitMetric.Unavailable("5小时额度"),
-        RateLimitMetric.Unavailable("周额度"));
+        RateLimitMetric.Unavailable,
+        RateLimitMetric.Unavailable);
 }
 
 public sealed record ResetCreditItem(
@@ -41,4 +39,13 @@ public sealed record ResetCreditSnapshot(
     DateTimeOffset FetchedAt)
 {
     public static ResetCreditSnapshot Unavailable { get; } = new(false, 0, [], DateTimeOffset.UtcNow);
+}
+
+public sealed record AccountUsageSnapshot(
+    bool IsAvailable,
+    string? DisplayName,
+    string? Email,
+    long LifetimeTokens)
+{
+    public static AccountUsageSnapshot Unavailable { get; } = new(false, null, null, 0);
 }

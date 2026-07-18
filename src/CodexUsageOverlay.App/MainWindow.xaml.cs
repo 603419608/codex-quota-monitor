@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private const double MiniWidth = 330;
     private const double ChineseMiniWidthWithoutFiveHour = 220;
     private const double MiniHeight = 48;
+    private const double AccountSummaryHeight = 56;
     private static readonly TimeSpan HideDebounce = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan PositionSaveDebounce = TimeSpan.FromMilliseconds(500);
 
@@ -159,7 +160,8 @@ public partial class MainWindow : Window
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(OverlayViewModel.IsCollapsed) ||
-            e.PropertyName == nameof(OverlayViewModel.FiveHourLimitVisibility))
+            e.PropertyName == nameof(OverlayViewModel.FiveHourLimitVisibility) ||
+            e.PropertyName == nameof(OverlayViewModel.AccountSummaryVisibility))
         {
             ApplyWindowMode();
         }
@@ -320,10 +322,13 @@ public partial class MainWindow : Window
         else
         {
             var hasFiveHourLimit = _viewModel.FiveHourLimitVisibility == Visibility.Visible;
+            var accountSummaryHeight = _viewModel.AccountSummaryVisibility == Visibility.Visible
+                ? AccountSummaryHeight
+                : 0;
             MinWidth = 220;
-            MinHeight = hasFiveHourLimit ? 500 : 370;
+            MinHeight = (hasFiveHourLimit ? 500 : 370) + accountSummaryHeight;
             Width = FullWidth;
-            Height = hasFiveHourLimit ? FullHeight : FullHeightWithoutFiveHour;
+            Height = (hasFiveHourLimit ? FullHeight : FullHeightWithoutFiveHour) + accountSummaryHeight;
         }
 
         KeepWindowInsideWorkArea();

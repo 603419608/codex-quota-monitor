@@ -10,6 +10,7 @@ namespace CodexUsageOverlay.Core;
 public sealed class AppServerClient : IAsyncDisposable
 {
     private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan WebSocketCloseTimeout = TimeSpan.FromSeconds(2);
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -60,8 +61,8 @@ public sealed class AppServerClient : IAsyncDisposable
             ["clientInfo"] = new JsonObject
             {
                 ["name"] = "codex_usage_overlay",
-                ["title"] = "Codex Usage Overlay",
-                ["version"] = "0.1.8"
+                ["title"] = "Codex Quota Monitor",
+                ["version"] = "0.1.9"
             },
             ["capabilities"] = new JsonObject
             {
@@ -410,11 +411,19 @@ public sealed class AppServerClient : IAsyncDisposable
         {
             if (_webSocket.State == WebSocketState.Open)
             {
-                await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                using var closeCts = new CancellationTokenSource(WebSocketCloseTimeout);
+                await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", closeCts.Token);
             }
         }
         catch
         {
+            try
+            {
+                _webSocket.Abort();
+            }
+            catch
+            {
+            }
         }
 
         _webSocket.Dispose();

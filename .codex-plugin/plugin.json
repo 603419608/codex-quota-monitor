@@ -1,23 +1,23 @@
 {
   "id": "codex-usage-overlay",
   "name": "codex-usage-overlay",
-  "version": "0.1.8",
-  "description": "A Windows companion overlay for Codex context usage and rate limits.",
+  "version": "0.1.9",
+  "description": "A Windows companion overlay for ChatGPT Codex context, quotas, and account usage.",
   "author": {
     "name": "DENG GUOCHAO"
   },
   "interface": {
-    "displayName": "Codex Usage Overlay",
-    "shortDescription": "Show Codex context usage and rate limits.",
-    "longDescription": "A Windows WPF companion overlay that displays current ChatGPT Codex context remaining and available rate-limit windows. The 5-hour limit is shown only when Codex app-server reports that window.",
+    "displayName": "Codex Quota Monitor",
+    "shortDescription": "Show ChatGPT Codex context, quotas, and usage.",
+    "longDescription": "A Windows WPF companion overlay that displays current ChatGPT Codex context remaining, available rate-limit windows, account identity, and lifetime token usage. The 5-hour limit appears only when Codex app-server reports that window.",
     "developerName": "DENG GUOCHAO",
     "category": "Productivity",
     "capabilities": [
       "Context usage overlay",
-      "Rate limit display",
+      "Rate limit and account usage display",
       "Windows companion window"
     ],
     "brandColor": "#8DDB3A",
-    "defaultPrompt": "Launch the Codex Usage Overlay companion from the plugin scripts folder."
+    "defaultPrompt": "Launch the Codex Quota Monitor companion from the plugin scripts folder."
   }
 }

@@ -23,6 +23,7 @@ public sealed class LocalizedStrings
     public required string ResetCreditsTraySummaryFormat { get; init; }
     public required string ResetCreditsDetailHeaderFormat { get; init; }
     public required string ResetCreditsDetailLineFormat { get; init; }
+    public required string LifetimeTokensFormat { get; init; }
 
     private static LocalizedStrings ForCulture(CultureInfo culture)
     {
@@ -52,7 +53,8 @@ public sealed class LocalizedStrings
         ResetCreditsSummaryFormat = "重置机会 {0} 次 · 最早 {1} 过期",
         ResetCreditsTraySummaryFormat = "重置 {0}次 · {1}",
         ResetCreditsDetailHeaderFormat = "重置机会 {0} 次",
-        ResetCreditsDetailLineFormat = "{0} · {1} 过期"
+        ResetCreditsDetailLineFormat = "{0} · {1} 过期",
+        LifetimeTokensFormat = "累计 Token {0}"
     };
 
     private static LocalizedStrings English { get; } = new()
@@ -73,7 +75,8 @@ public sealed class LocalizedStrings
         ResetCreditsSummaryFormat = "Resets {0} · first expires {1}",
         ResetCreditsTraySummaryFormat = "Resets {0} · {1}",
         ResetCreditsDetailHeaderFormat = "Resets {0}",
-        ResetCreditsDetailLineFormat = "{0} · expires {1}"
+        ResetCreditsDetailLineFormat = "{0} · expires {1}",
+        LifetimeTokensFormat = "Lifetime tokens {0}"
     };
 
     private static LocalizedStrings French { get; } = new()
@@ -94,6 +97,7 @@ public sealed class LocalizedStrings
         ResetCreditsSummaryFormat = "Réinitialisations {0} · première expiration {1}",
         ResetCreditsTraySummaryFormat = "Réinit. {0} · {1}",
         ResetCreditsDetailHeaderFormat = "Réinitialisations {0}",
-        ResetCreditsDetailLineFormat = "{0} · expire le {1}"
+        ResetCreditsDetailLineFormat = "{0} · expire le {1}",
+        LifetimeTokensFormat = "Tokens cumulés {0}"
     };
 }

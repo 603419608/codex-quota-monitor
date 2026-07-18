@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -123,7 +124,13 @@ internal static class JsonNodeHelpers
         catch
         {
             var text = node.ToString();
-            return double.TryParse(text, out var parsed) ? parsed : null;
+            return double.TryParse(
+                text,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var parsed)
+                ? parsed
+                : null;
         }
     }
 }
